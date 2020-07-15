@@ -6,7 +6,10 @@ import (
 )
 
 //TODO: be able to read xcell file and return data structure you need to transform to a csv file
+//TODO: if you gonna make this program run as a web server you might make
+//	csvRow var not global
 
+//XlsxData interface has methods that we need to open and dump data from an xcell file .
 type XlsxData interface {
 	Open() error
 	Dump()
@@ -16,6 +19,7 @@ var (
 	csvRow [][]string
 )
 
+// XlsxFileInfo struct with instance that we need as variables to pass to XlsxData interface methods to work.
 type XlsxFileInfo struct {
 	FileName  string
 	SheetName string
@@ -23,11 +27,13 @@ type XlsxFileInfo struct {
 	Chan      chan ChanResult
 }
 
+// ChanResult result that the channel receives
 type ChanResult struct {
 	CsvData [][]string
 	Err     error
 }
 
+// New function returns pointer to XlsxFileInfo struct
 func New(filename, sheetName string, c chan ChanResult) *XlsxFileInfo {
 	x := &XlsxFileInfo{}
 	x.FileName = filename
@@ -60,6 +66,7 @@ func checkLength(data [][]string) (bool, int) {
 	return less, l + 1
 }
 
+// Open open xcel file
 func (xl *XlsxFileInfo) Open() error {
 	f, err := excelize.OpenFile(xl.FileName)
 	xl.File = f
@@ -69,6 +76,7 @@ func (xl *XlsxFileInfo) Open() error {
 	return nil
 }
 
+// Dump get Data from xcel file
 func (xl *XlsxFileInfo) Dump() {
 	var totalRows [][]string
 	cols, err := xl.File.Cols(xl.SheetName)
