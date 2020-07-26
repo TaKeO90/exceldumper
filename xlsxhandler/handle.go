@@ -2,12 +2,10 @@ package xlsxhandler
 
 import (
 	"fmt"
-	"github.com/360EntSecGroup-Skylar/excelize"
-)
 
-//TODO: be able to read xcell file and return data structure you need to transform to a csv file
-//TODO: if you gonna make this program run as a web server you might make
-//	csvRow var not global
+	"github.com/360EntSecGroup-Skylar/excelize"
+	"path/filepath"
+)
 
 //XlsxData interface has methods that we need to open and dump data from an xcell file .
 type XlsxData interface {
@@ -33,14 +31,26 @@ type ChanResult struct {
 	Err     error
 }
 
+func checkExcelFile(filename string) (string, bool) {
+	if ext := filepath.Ext(filename); ext != ".xlsx" {
+		return ext, false
+	}
+	return "", true
+}
+
 // New function returns pointer to XlsxFileInfo struct
-func New(filename, sheetName string, c chan ChanResult) *XlsxFileInfo {
+func New(filename, sheetName string, c chan ChanResult) (*XlsxFileInfo, error) {
 	x := &XlsxFileInfo{}
-	x.FileName = filename
+	if ext, isExcel := checkExcelFile(filename); isExcel {
+		x.FileName = filename
+	} else {
+		err := fmt.Errorf("Want <.xlsx> file got %s\n", ext)
+		return nil, err
+	}
 	x.SheetName = sheetName
 	x.File = nil
 	x.Chan = c
-	return x
+	return x, nil
 }
 
 func dataRefactoring(data [][]string, index int) []string {

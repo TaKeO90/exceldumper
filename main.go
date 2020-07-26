@@ -1,41 +1,62 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"sync"
 
-	"./csvhandler"
-	"./xlsxhandler"
+	"github.com/TaKeO90/exceldumper/csvhandler"
+	"github.com/TaKeO90/exceldumper/xlsxhandler"
 )
 
-//TODO: add flags to the program
 //TODO: progress bar or status
 //TODO: support vcf format
 
-const filepath string = "./1.xlsx"
+var (
+	excel   string
+	csvfile string
+	sheet   string
+)
 
 func main() {
-	var WG sync.WaitGroup
-	var x xlsxhandler.XlsxData
-	var csF csvhandler.CsvFile
-	var csvfilename string = "file.csv"
 
-	WG.Add(2)
+	var (
+		WG  sync.WaitGroup
+		x   xlsxhandler.XlsxData
+		csF csvhandler.CsvFile
+	)
 
-	c := make(chan xlsxhandler.ChanResult)
-	n := xlsxhandler.New(filepath, "Sheet2", c)
-	x = n
+	flagParser()
 
-	err := x.Open()
-	checkError(err)
+	if excel == "" || sheet == "" || csvfile == "" {
+		flag.PrintDefaults()
+	} else {
 
-	excelData, err := workerI(&WG, &x, &c)
-	checkError(err)
+		WG.Add(2)
 
-	workerII(&WG, csF, excelData, csvfilename)
+		c := make(chan xlsxhandler.ChanResult)
+		n, err := xlsxhandler.New(excel, sheet, c)
+		checkError(err)
+		x = n
 
-	WG.Wait()
+		err = x.Open()
+		checkError(err)
+
+		excelData, err := workerI(&WG, &x, &c)
+		checkError(err)
+
+		workerII(&WG, csF, excelData, csvfile)
+
+		WG.Wait()
+	}
+}
+
+func flagParser() {
+	flag.StringVar(&excel, "excel", "", "Specify the excel file path that you want to dump it data into <csv or vcf>")
+	flag.StringVar(&csvfile, "csvfile", "", "Specify the name of the outputed csv file")
+	flag.StringVar(&sheet, "sheet", "Sheet1", "Specify the name of the Sheet Default is Set to <Sheet1>")
+	flag.Parse()
 }
 
 func workerI(wg *sync.WaitGroup, x *xlsxhandler.XlsxData, c *chan xlsxhandler.ChanResult) ([][]string, error) {
