@@ -7,15 +7,14 @@ import (
 	"sync"
 
 	"github.com/TaKeO90/exceldumper/csvhandler"
+	"github.com/TaKeO90/exceldumper/vcfhandler"
 	"github.com/TaKeO90/exceldumper/xlsxhandler"
 )
-
-//TODO: progress bar or status
-//TODO: support vcf format
 
 var (
 	excel   string
 	csvfile string
+	vcffile string
 	sheet   string
 )
 
@@ -29,26 +28,60 @@ func main() {
 
 	flagParser()
 
-	if excel == "" || sheet == "" || csvfile == "" {
-		flag.PrintDefaults()
-	} else {
+	c := make(chan xlsxhandler.ChanResult)
+
+	if excel != "" && sheet != "" && csvfile != "" && vcffile == "" { //ADD HERE A CONDITION FOR CSV THEN ANOTHER ONE FOR VCF
 
 		WG.Add(2)
+		cc := make(chan csvhandler.ChanRes)
 
-		c := make(chan xlsxhandler.ChanResult)
-		n, err := xlsxhandler.New(excel, sheet, c)
+		n, err := xlsxhandler.New(excel, sheet, c, &WG)
 		checkError(err)
 		x = n
-
 		err = x.Open()
 		checkError(err)
+		fmt.Printf("[*] Extracting Data \n")
+		go x.Dump()
+		res := <-c
+		checkError(res.Err)
 
-		excelData, err := workerI(&WG, &x, &c)
+		fmt.Printf("[*] Saving Data into csv file \n")
+		csvFD, err := csvhandler.New(csvfile, res.DumpData, cc, &WG)
+		checkError(err)
+		csF = csvFD
+		go csF.WriteData()
+		V := <-cc
+		checkError(V.Err)
+		if V.IsOk {
+			fmt.Printf("Finished\n")
+		} else {
+			fmt.Printf("Failed\n")
+		}
+		WG.Wait()
+
+	} else if excel != "" && sheet != "" && vcffile != "" && csvfile == "" {
+		WG.Add(2)
+		cB := make(chan bool)
+		n, err := xlsxhandler.New(excel, sheet, c, &WG)
+		checkError(err)
+		x = n
+		err = x.Open()
+		checkError(err)
+		fmt.Printf("[*] Extracting Data \n")
+		go x.Dump()
+		res := <-c
+		checkError(res.Err)
+
+		vcf, err := vcfhandler.NewVcf(res.DumpData, &WG, cB, vcffile)
 		checkError(err)
 
-		workerII(&WG, csF, excelData, csvfile)
-
-		WG.Wait()
+		go vcf.ExtWrite()
+		isFinished := <-cB
+		if isFinished {
+			fmt.Println("Finished")
+		}
+	} else {
+		flag.PrintDefaults()
 	}
 }
 
@@ -56,36 +89,9 @@ func flagParser() {
 	flag.StringVar(&excel, "excel", "", "Specify the excel file path that you want to dump it data into <csv or vcf>")
 	flag.StringVar(&csvfile, "csvfile", "", "Specify the name of the outputed csv file")
 	flag.StringVar(&sheet, "sheet", "Sheet1", "Specify the name of the Sheet Default is Set to <Sheet1>")
+	flag.StringVar(&vcffile, "vcffile", "", "Specify the name of the outputed vcf file")
 	flag.Parse()
-}
 
-func workerI(wg *sync.WaitGroup, x *xlsxhandler.XlsxData, c *chan xlsxhandler.ChanResult) ([][]string, error) {
-	fmt.Printf("[*] Extracting Data \n")
-	defer wg.Done()
-	xd := *x
-	go xd.Dump()
-	D := <-*c
-	if D.Err != nil {
-		return [][]string{}, D.Err
-	}
-	return D.CsvData, nil
-}
-
-func workerII(wg *sync.WaitGroup, csF csvhandler.CsvFile, DumpedData [][]string, csvfilename string) {
-	cc := make(chan csvhandler.ChanRes)
-	fmt.Printf("[*] Saving Data into csv file \n")
-	csvFD, err := csvhandler.New(csvfilename, DumpedData, cc)
-	checkError(err)
-	defer wg.Done()
-	csF = csvFD
-	go csF.WriteData()
-	V := <-cc
-	checkError(V.Err)
-	if V.IsOk {
-		fmt.Printf("Finished\n")
-	} else {
-		fmt.Printf("Failed\n")
-	}
 }
 
 func checkError(err error) {
