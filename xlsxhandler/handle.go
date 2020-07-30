@@ -2,10 +2,13 @@ package xlsxhandler
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/360EntSecGroup-Skylar/excelize"
 	"path/filepath"
 )
+
+//TODO: Replace in dump function column dumping with row's
 
 //XlsxData interface has methods that we need to open and dump data from an xcell file .
 type XlsxData interface {
@@ -13,22 +16,19 @@ type XlsxData interface {
 	Dump()
 }
 
-var (
-	csvRow [][]string
-)
-
 // XlsxFileInfo struct with instance that we need as variables to pass to XlsxData interface methods to work.
 type XlsxFileInfo struct {
 	FileName  string
 	SheetName string
 	File      *excelize.File
 	Chan      chan ChanResult
+	Wg        *sync.WaitGroup
 }
 
 // ChanResult result that the channel receives
 type ChanResult struct {
-	CsvData [][]string
-	Err     error
+	DumpData [][]string
+	Err      error
 }
 
 func checkExcelFile(filename string) (string, bool) {
@@ -39,7 +39,7 @@ func checkExcelFile(filename string) (string, bool) {
 }
 
 // New function returns pointer to XlsxFileInfo struct
-func New(filename, sheetName string, c chan ChanResult) (*XlsxFileInfo, error) {
+func New(filename, sheetName string, c chan ChanResult, wg *sync.WaitGroup) (*XlsxFileInfo, error) {
 	x := &XlsxFileInfo{}
 	if ext, isExcel := checkExcelFile(filename); isExcel {
 		x.FileName = filename
@@ -50,30 +50,8 @@ func New(filename, sheetName string, c chan ChanResult) (*XlsxFileInfo, error) {
 	x.SheetName = sheetName
 	x.File = nil
 	x.Chan = c
+	x.Wg = wg
 	return x, nil
-}
-
-func dataRefactoring(data [][]string, index int) []string {
-	var r []string
-	for i := range data {
-		r = append(r, data[i][index])
-	}
-	return r
-}
-
-func checkLength(data [][]string) (bool, int) {
-	var less bool
-	l := 0
-	for j := range data {
-		if j == len(data)-1 {
-			break
-		}
-		if len(data[j]) != len(data[j+1]) {
-			l = j + 1
-			less = true
-		}
-	}
-	return less, l + 1
 }
 
 // Open open xcel file
@@ -86,39 +64,20 @@ func (xl *XlsxFileInfo) Open() error {
 	return nil
 }
 
-// Dump get Data from xcel file
+// Dump get Data from excel file
 func (xl *XlsxFileInfo) Dump() {
-	var totalRows [][]string
-	cols, err := xl.File.Cols(xl.SheetName)
-	c := &ChanResult{}
+	c := new(ChanResult)
+	defer xl.Wg.Done()
+	rows, err := xl.File.Rows(xl.SheetName)
 	if err != nil {
-		c.CsvData, c.Err = csvRow, err
+		c.Err = err
+		c.DumpData = [][]string{}
 		xl.Chan <- *c
 	}
-	for cols.Next() {
-		col, err := cols.Rows()
-		c.CsvData, c.Err = csvRow, err
-		if err != nil {
-			xl.Chan <- *c
-		}
-		var r []string
-		for i, rowcell := range col {
-			if i == 0 {
-				r = r[:0]
-			}
-			r = append(r, rowcell)
-		}
-		totalRows = append(totalRows, r)
+	for rows.Next() {
+		row := rows.Columns()
+		c.DumpData = append(c.DumpData, row)
 	}
-	if less, l := checkLength(totalRows); less {
-		err := fmt.Errorf("The following column number %d has less data than others", l)
-		c.CsvData, c.Err = csvRow, err
-	} else {
-		for j := range totalRows[l] {
-			d := dataRefactoring(totalRows, j)
-			csvRow = append(csvRow, d)
-		}
-	}
-	c.CsvData, c.Err = csvRow, nil
+	c.Err = nil
 	xl.Chan <- *c
 }
