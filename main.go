@@ -28,12 +28,11 @@ func main() {
 
 	flagParser()
 
-	c := make(chan xlsxhandler.ChanResult)
-
-	if excel != "" && sheet != "" && csvfile != "" && vcffile == "" { //ADD HERE A CONDITION FOR CSV THEN ANOTHER ONE FOR VCF
-
+	if excel != "" && csvfile != "" && vcffile == "" {
 		WG.Add(2)
+
 		cc := make(chan csvhandler.ChanRes)
+		c := make(chan xlsxhandler.ChanResult)
 
 		n, err := xlsxhandler.New(excel, sheet, c, &WG)
 		checkError(err)
@@ -59,30 +58,55 @@ func main() {
 		}
 		WG.Wait()
 
-	} else if excel != "" && sheet != "" && vcffile != "" && csvfile == "" {
+	} else if excel != "" && vcffile != "" && csvfile == "" {
 		WG.Add(2)
-		cB := make(chan bool)
-		n, err := xlsxhandler.New(excel, sheet, c, &WG)
-		checkError(err)
-		x = n
-		err = x.Open()
-		checkError(err)
-		fmt.Printf("[*] Extracting Data \n")
-		go x.Dump()
-		res := <-c
-		checkError(res.Err)
 
-		vcf, err := vcfhandler.NewVcf(res.DumpData, &WG, cB, vcffile)
-		checkError(err)
+		cB := make(chan vcfhandler.VcfChanRes)
+		c := make(chan xlsxhandler.ChanResult)
 
-		go vcf.ExtWrite()
-		isFinished := <-cB
-		if isFinished {
+		dumpedData, err := fileOpenWorker(&WG, c, x)
+		checkError(err)
+		ok, err := vcfWorker(&WG, cB, dumpedData)
+		checkError(err)
+		if ok {
 			fmt.Println("Finished")
 		}
+		WG.Wait()
+
 	} else {
 		flag.PrintDefaults()
 	}
+}
+
+func fileOpenWorker(wg *sync.WaitGroup, c chan xlsxhandler.ChanResult, x xlsxhandler.XlsxData) ([][]string, error) {
+	n, err := xlsxhandler.New(excel, sheet, c, wg)
+	checkError(err)
+	x = n
+	err = x.Open()
+	checkError(err)
+	fmt.Printf("[*] Extracting Data \n")
+	go x.Dump()
+	res := <-c
+	if err != nil {
+		return nil, err
+	}
+	return res.DumpData, nil
+}
+
+func vcfWorker(wg *sync.WaitGroup, c chan vcfhandler.VcfChanRes, dumpData [][]string) (bool, error) {
+	vcf, err := vcfhandler.NewVcf(dumpData, wg, c, vcffile)
+	if err != nil {
+		return false, err
+	}
+	go vcf.ExtWrite()
+	isFinished := <-c
+	if isFinished.Err != nil {
+		return false, err
+	}
+	if isFinished.Ok {
+		return true, nil
+	}
+	return false, nil
 }
 
 func flagParser() {
