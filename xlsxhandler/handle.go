@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/360EntSecGroup-Skylar/excelize"
+	"github.com/360EntSecGroup-Skylar/excelize/v2"
 	"path/filepath"
 )
 
@@ -64,18 +64,22 @@ func (xl *XlsxFileInfo) Open() error {
 	return nil
 }
 
+func checkError(err error, ch chan ChanResult, cR *ChanResult) {
+	if err != nil {
+		cR.Err, cR.DumpData = err, nil
+		ch <- *cR
+	}
+}
+
 // Dump get Data from excel file
 func (xl *XlsxFileInfo) Dump() {
 	c := new(ChanResult)
 	defer xl.Wg.Done()
 	rows, err := xl.File.Rows(xl.SheetName)
-	if err != nil {
-		c.Err = err
-		c.DumpData = [][]string{}
-		xl.Chan <- *c
-	}
+	checkError(err, xl.Chan, c)
 	for rows.Next() {
-		row := rows.Columns()
+		row, err := rows.Columns()
+		checkError(err, xl.Chan, c)
 		c.DumpData = append(c.DumpData, row)
 	}
 	c.Err = nil

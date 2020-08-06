@@ -16,11 +16,16 @@ import (
 type VcfElmnt struct {
 	Data   [][]string
 	Wg     *sync.WaitGroup
-	Chan   chan bool
+	Chan   chan VcfChanRes
 	Writer *os.File
 }
 
-func NewVcf(data [][]string, wg *sync.WaitGroup, c chan bool, filename string) (*VcfElmnt, error) {
+type VcfChanRes struct {
+	Ok  bool
+	Err error
+}
+
+func NewVcf(data [][]string, wg *sync.WaitGroup, c chan VcfChanRes, filename string) (*VcfElmnt, error) {
 	f, err := os.Create(filename)
 	if err != nil {
 		return nil, err
@@ -31,11 +36,11 @@ func NewVcf(data [][]string, wg *sync.WaitGroup, c chan bool, filename string) (
 func (v *VcfElmnt) ExtWrite() {
 	vciw := vcard.NewDirectoryInfoWriter(v.Writer)
 	defer v.Wg.Done()
+	chR := new(VcfChanRes)
 	count := 0
 	for i, n := range v.Data {
 		var vc vcard.VCard
 		if i != 0 {
-			vc.Version = "2.1"
 			//GET NAMES FIRST n[1]
 			if n[1] != "" {
 				name := strings.Split(n[1], " ")
@@ -52,7 +57,8 @@ func (v *VcfElmnt) ExtWrite() {
 		}
 		vc.WriteTo(vciw)
 		count++
-		fmt.Println(count)
+		fmt.Printf("%v\n", count)
 	}
-	v.Chan <- true
+	chR.Err, chR.Ok = nil, true
+	v.Chan <- *chR
 }
