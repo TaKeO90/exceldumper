@@ -6,8 +6,6 @@ import (
 	"sync"
 )
 
-//TODO: progress bar or status
-
 type CsvFile interface {
 	WriteData()
 }
@@ -24,7 +22,8 @@ type ChanRes struct {
 	Err  error
 }
 
-func New(filename string, data [][]string, c chan ChanRes, wg *sync.WaitGroup) (*CsvFileData, error) {
+func New(filename string, data [][]string, c chan ChanRes, wg *sync.WaitGroup) (CsvFile, error) {
+	var fcsv CsvFile
 	csvF := new(CsvFileData)
 	f, err := os.Create(filename)
 	if err != nil {
@@ -34,7 +33,8 @@ func New(filename string, data [][]string, c chan ChanRes, wg *sync.WaitGroup) (
 	csvF.CsvWriter, csvF.FileData = w, data
 	csvF.Chan = c
 	csvF.Wg = wg
-	return csvF, nil
+	fcsv = csvF
+	return fcsv, nil
 }
 
 func (cF *CsvFileData) WriteData() {
