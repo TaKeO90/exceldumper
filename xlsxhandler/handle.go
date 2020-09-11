@@ -2,13 +2,13 @@ package xlsxhandler
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"sync"
 
 	"github.com/360EntSecGroup-Skylar/excelize/v2"
 	"path/filepath"
 )
-
-//TODO: Replace in dump function column dumping with row's
 
 //XlsxData interface has methods that we need to open and dump data from an xcell file .
 type XlsxData interface {
@@ -23,6 +23,8 @@ type XlsxFileInfo struct {
 	File      *excelize.File
 	Chan      chan ChanResult
 	Wg        *sync.WaitGroup
+	Reader    io.Reader
+	CntNumber int
 }
 
 // ChanResult result that the channel receives
@@ -39,7 +41,8 @@ func checkExcelFile(filename string) (string, bool) {
 }
 
 // New function returns pointer to XlsxFileInfo struct
-func New(filename, sheetName string, c chan ChanResult, wg *sync.WaitGroup) (*XlsxFileInfo, error) {
+func New(filename, sheetName string, c chan ChanResult, wg *sync.WaitGroup, reader io.Reader, contactNumber int) (XlsxData, error) {
+	var xlxData XlsxData
 	x := &XlsxFileInfo{}
 	if ext, isExcel := checkExcelFile(filename); isExcel {
 		x.FileName = filename
@@ -51,17 +54,23 @@ func New(filename, sheetName string, c chan ChanResult, wg *sync.WaitGroup) (*Xl
 	x.File = nil
 	x.Chan = c
 	x.Wg = wg
-	return x, nil
+	x.Reader = reader
+	x.CntNumber = contactNumber
+	xlxData = x
+	return xlxData, nil
 }
 
 // Open open xcel file
-func (xl *XlsxFileInfo) Open() error {
-	f, err := excelize.OpenFile(xl.FileName)
-	xl.File = f
-	if err != nil {
-		return err
+func (xl *XlsxFileInfo) Open() (err error) {
+	isWeb := os.Getenv("web")
+	var f *excelize.File
+	if isWeb != "true" {
+		f, err = excelize.OpenFile(xl.FileName)
+	} else {
+		f, err = excelize.OpenReader(xl.Reader)
 	}
-	return nil
+	xl.File = f
+	return
 }
 
 func checkError(err error, ch chan ChanResult, cR *ChanResult) {
@@ -77,7 +86,15 @@ func (xl *XlsxFileInfo) Dump() {
 	defer xl.Wg.Done()
 	rows, err := xl.File.Rows(xl.SheetName)
 	checkError(err, xl.Chan, c)
+	var counter int = 0
+	fmt.Println(xl.CntNumber)
 	for rows.Next() {
+		counter++
+		if xl.CntNumber != 0 {
+			if counter == xl.CntNumber+1 {
+				break
+			}
+		}
 		row, err := rows.Columns()
 		checkError(err, xl.Chan, c)
 		c.DumpData = append(c.DumpData, row)

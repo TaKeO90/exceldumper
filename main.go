@@ -12,18 +12,19 @@ import (
 )
 
 var (
-	excel   string
-	csvfile string
-	vcffile string
-	sheet   string
+	excel     string
+	csvfile   string
+	vcffile   string
+	sheet     string
+	cntNumber int
 )
 
 func main() {
 
 	var (
-		WG  sync.WaitGroup
-		x   xlsxhandler.XlsxData
-		csF csvhandler.CsvFile
+		WG sync.WaitGroup
+		//x   xlsxhandler.XlsxData
+		//csF csvhandler.CsvFile
 	)
 
 	flagParser()
@@ -34,21 +35,21 @@ func main() {
 		cc := make(chan csvhandler.ChanRes)
 		c := make(chan xlsxhandler.ChanResult)
 
-		n, err := xlsxhandler.New(excel, sheet, c, &WG)
+		nx, err := xlsxhandler.New(excel, sheet, c, &WG, nil, cntNumber)
 		checkError(err)
-		x = n
-		err = x.Open()
+		//x = n
+		err = nx.Open()
 		checkError(err)
 		fmt.Printf("[*] Extracting Data \n")
-		go x.Dump()
+		go nx.Dump()
 		res := <-c
 		checkError(res.Err)
 
 		fmt.Printf("[*] Saving Data into csv file \n")
 		csvFD, err := csvhandler.New(csvfile, res.DumpData, cc, &WG)
 		checkError(err)
-		csF = csvFD
-		go csF.WriteData()
+		//csF = csvFD
+		go csvFD.WriteData()
 		V := <-cc
 		checkError(V.Err)
 		if V.IsOk {
@@ -64,7 +65,10 @@ func main() {
 		cB := make(chan vcfhandler.VcfChanRes)
 		c := make(chan xlsxhandler.ChanResult)
 
-		dumpedData, err := fileOpenWorker(&WG, c, x)
+		nx, err := xlsxhandler.New(excel, sheet, c, &WG, nil, cntNumber)
+		checkError(err)
+
+		dumpedData, err := fileOpenWorker(&WG, c, nx)
 		checkError(err)
 		ok, err := vcfWorker(&WG, cB, dumpedData)
 		checkError(err)
@@ -79,10 +83,7 @@ func main() {
 }
 
 func fileOpenWorker(wg *sync.WaitGroup, c chan xlsxhandler.ChanResult, x xlsxhandler.XlsxData) ([][]string, error) {
-	n, err := xlsxhandler.New(excel, sheet, c, wg)
-	checkError(err)
-	x = n
-	err = x.Open()
+	err := x.Open()
 	checkError(err)
 	fmt.Printf("[*] Extracting Data \n")
 	go x.Dump()
@@ -114,6 +115,7 @@ func flagParser() {
 	flag.StringVar(&csvfile, "csvfile", "", "Specify the name of the outputed csv file")
 	flag.StringVar(&sheet, "sheet", "Sheet1", "Specify the name of the Sheet Default is Set to <Sheet1>")
 	flag.StringVar(&vcffile, "vcffile", "", "Specify the name of the outputed vcf file")
+	flag.IntVar(&cntNumber, "cntnumber", 0, "number of contacts to write into the vcf file")
 	flag.Parse()
 
 }
