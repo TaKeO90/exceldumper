@@ -7,7 +7,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/TaKeO90/exceldumper/vcfhandler"
 	"github.com/TaKeO90/exceldumper/xlsxhandler"
@@ -21,35 +20,29 @@ const (
 	OUTFILEEXT string = ".vcf"
 )
 
-// FileToDownload the output file that the user should Download.
-// NOTE: if that variable doesn't do the expected work use memcached server to store files that they need to be downloaded and think about each user need
-//	a token that is just a encoded name.
-var FileToDownload string
+type ChanResult struct {
+	File string
+	Ok   bool
+	Err  error
+}
 
+//(file string, ok bool, err error)
 //DumpExcelData function accept a excel
-func DumpExcelData(reader io.Reader, outFName string, cntNumber int) (file string, ok bool, err error) {
-	var wg sync.WaitGroup
-	wg.Add(2)
-	c := make(chan xlsxhandler.ChanResult)
-	cv := make(chan vcfhandler.VcfChanRes)
+func DumpExcelData(reader io.Reader, outFName string, cntNumber int, c chan ChanResult) {
+	chanResult := new(ChanResult)
 	filename := strings.Split(outFName, ".")[0] + OUTFILEEXT
-	x, err := xlsxhandler.New(outFName, SHEETNAME, c, &wg, reader, cntNumber)
+	x, err := xlsxhandler.New(outFName, SHEETNAME, reader, cntNumber)
 	err = x.Open()
-	go x.Dump()
-	ext := <-c
-	if ext.Err != nil {
-		err = ext.Err
+	data, err := x.Dump()
+	if err != nil {
+		chanResult.Err = err
+		c <- *chanResult
 	}
-	v, err := vcfhandler.NewVcf(ext.DumpData, &wg, cv, filename)
-	go v.ExtWrite()
-	vcfD := <-cv
-	if vcfD.Err != nil {
-		err = vcfD.Err
-	}
-	ok = vcfD.Ok
-	file = filename
-	wg.Wait()
-	return
+	v, err := vcfhandler.NewVcf(data, filename)
+	ok := v.ExtWrite()
+	file := filename
+	chanResult.File, chanResult.Ok = file, ok
+	c <- *chanResult
 }
 
 func checkToDownloadFile(filename string) (bool, error) {
@@ -58,7 +51,7 @@ func checkToDownloadFile(filename string) (bool, error) {
 		return false, err
 	}
 	for _, f := range dir {
-		if f.Name() == filename && filename == FileToDownload {
+		if f.Name() == filename {
 			return true, nil
 		}
 	}

@@ -1,10 +1,8 @@
 package vcfhandler
 
 import (
-	"fmt"
 	"os"
 	"strings"
-	"sync"
 
 	"bitbucket.org/llg/vcard"
 )
@@ -15,29 +13,20 @@ import (
 
 type VcfElmnt struct {
 	Data   [][]string
-	Wg     *sync.WaitGroup
-	Chan   chan VcfChanRes
 	Writer *os.File
 }
 
-type VcfChanRes struct {
-	Ok  bool
-	Err error
-}
-
-func NewVcf(data [][]string, wg *sync.WaitGroup, c chan VcfChanRes, filename string) (*VcfElmnt, error) {
+func NewVcf(data [][]string, filename string) (*VcfElmnt, error) {
 	f, err := os.Create(filename)
 	if err != nil {
 		return nil, err
 	}
-	return &VcfElmnt{data, wg, c, f}, nil
+	return &VcfElmnt{data, f}, nil
 }
 
-func (v *VcfElmnt) ExtWrite() {
+func (v *VcfElmnt) ExtWrite() bool {
+	defer v.Writer.Close()
 	vciw := vcard.NewDirectoryInfoWriter(v.Writer)
-	defer v.Wg.Done()
-	chR := new(VcfChanRes)
-	count := 0
 	for i, n := range v.Data {
 		var vc vcard.VCard
 		if i != 0 {
@@ -56,9 +45,6 @@ func (v *VcfElmnt) ExtWrite() {
 			}
 		}
 		vc.WriteTo(vciw)
-		count++
-		fmt.Printf("%v\n", count)
 	}
-	chR.Err, chR.Ok = nil, true
-	v.Chan <- *chR
+	return true
 }
