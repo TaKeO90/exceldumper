@@ -9,7 +9,8 @@
 
  ```sh
     $ git clone https://github.com/TaKeO90/exceldumper
-    $ make build
+    $ make -B `cli program`
+    $ make server `back-end web server api`
  ```
 
 # USAGE 
@@ -17,7 +18,7 @@
 
 ```sh
     * excel to vcf
-    $ ./exceldumper -excel <excel file name> -sheet <sheet name> -vcffile <output vcf file name>
+    $ ./exceldumper -excel <excel file name> -sheet <sheet name>  -cntnumber <number of rows to dump> -vcffile <output vcf file name>
     * excel to csv
     $ ./exceldumper -excel <excel file name> -sheet <sheet name> -csvfile <output csv file name>
 ```
