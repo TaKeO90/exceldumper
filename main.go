@@ -19,12 +19,27 @@ var (
 	cntNumber int
 )
 
+type chanres struct {
+	ok  bool
+	err error
+}
+
+func excelToVcf(nx xlsxhandler.XlsxData, ch chan chanres) {
+	dumpedData, err := fileOpenWorker(nx)
+	if err != nil {
+		ch <- *(&chanres{false, err})
+	}
+	ok, err := vcfWorker(dumpedData)
+	if err != nil {
+		ch <- *(&chanres{false, err})
+	}
+	ch <- *(&chanres{ok, nil})
+}
+
 func main() {
 
 	var (
 		WG sync.WaitGroup
-		//x   xlsxhandler.XlsxData
-		//csF csvhandler.CsvFile
 	)
 
 	flagParser()
@@ -33,22 +48,18 @@ func main() {
 		WG.Add(2)
 
 		cc := make(chan csvhandler.ChanRes)
-		c := make(chan xlsxhandler.ChanResult)
 
-		nx, err := xlsxhandler.New(excel, sheet, c, &WG, nil, cntNumber)
+		nx, err := xlsxhandler.New(excel, sheet, nil, cntNumber)
 		checkError(err)
-		//x = n
 		err = nx.Open()
 		checkError(err)
 		fmt.Printf("[*] Extracting Data \n")
-		go nx.Dump()
-		res := <-c
-		checkError(res.Err)
+		data, err := nx.Dump()
+		checkError(err)
 
 		fmt.Printf("[*] Saving Data into csv file \n")
-		csvFD, err := csvhandler.New(csvfile, res.DumpData, cc, &WG)
+		csvFD, err := csvhandler.New(csvfile, data, cc, &WG)
 		checkError(err)
-		//csF = csvFD
 		go csvFD.WriteData()
 		V := <-cc
 		checkError(V.Err)
@@ -60,54 +71,39 @@ func main() {
 		WG.Wait()
 
 	} else if excel != "" && vcffile != "" && csvfile == "" {
-		WG.Add(2)
-
-		cB := make(chan vcfhandler.VcfChanRes)
-		c := make(chan xlsxhandler.ChanResult)
-
-		nx, err := xlsxhandler.New(excel, sheet, c, &WG, nil, cntNumber)
+		ch := make(chan chanres)
+		nx, err := xlsxhandler.New(excel, sheet, nil, cntNumber)
 		checkError(err)
-
-		dumpedData, err := fileOpenWorker(&WG, c, nx)
-		checkError(err)
-		ok, err := vcfWorker(&WG, cB, dumpedData)
-		checkError(err)
-		if ok {
-			fmt.Println("Finished")
+		go excelToVcf(nx, ch)
+		results := <-ch
+		checkError(results.err)
+		if results.ok {
+			fmt.Println("finished")
 		}
-		WG.Wait()
 
 	} else {
 		flag.PrintDefaults()
 	}
 }
 
-func fileOpenWorker(wg *sync.WaitGroup, c chan xlsxhandler.ChanResult, x xlsxhandler.XlsxData) ([][]string, error) {
+func fileOpenWorker(x xlsxhandler.XlsxData) ([][]string, error) {
 	err := x.Open()
 	checkError(err)
 	fmt.Printf("[*] Extracting Data \n")
-	go x.Dump()
-	res := <-c
+	data, err := x.Dump()
 	if err != nil {
-		return nil, err
+		return data, err
 	}
-	return res.DumpData, nil
+	return data, nil
 }
 
-func vcfWorker(wg *sync.WaitGroup, c chan vcfhandler.VcfChanRes, dumpData [][]string) (bool, error) {
-	vcf, err := vcfhandler.NewVcf(dumpData, wg, c, vcffile)
+func vcfWorker(dumpData [][]string) (bool, error) {
+	vcf, err := vcfhandler.NewVcf(dumpData, vcffile)
 	if err != nil {
 		return false, err
 	}
-	go vcf.ExtWrite()
-	isFinished := <-c
-	if isFinished.Err != nil {
-		return false, err
-	}
-	if isFinished.Ok {
-		return true, nil
-	}
-	return false, nil
+	ok := vcf.ExtWrite()
+	return ok, nil
 }
 
 func flagParser() {

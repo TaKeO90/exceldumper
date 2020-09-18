@@ -22,6 +22,7 @@ type VcfCreated struct {
 
 // UploadFile get the uploaded file by the user.
 func UploadFile(c *gin.Context) {
+	ch := make(chan service.ChanResult)
 	c.Request.ParseMultipartForm(14)
 	contactN := c.Request.FormValue("cntNumber")
 	// get file from http request.
@@ -33,12 +34,12 @@ func UploadFile(c *gin.Context) {
 	// the number of contacts that we need to convert to a vcf file.
 	cntN, err := strconv.Atoi(contactN)
 	errHandler(err, c)
-	fileN, ok, err := service.DumpExcelData(file, fileHeader.Filename, cntN)
+	go service.DumpExcelData(file, fileHeader.Filename, cntN, ch)
+	results := <-ch
+	errHandler(results.Err, c)
 	errHandler(err, c)
-	if ok {
-		// if success we assign to FileToDownload the output vcf file.
-		service.FileToDownload = fileN
-		c.JSON(http.StatusCreated, &VcfCreated{true, fileN})
+	if results.Ok {
+		c.JSON(http.StatusCreated, &VcfCreated{true, results.File})
 	}
 }
 
