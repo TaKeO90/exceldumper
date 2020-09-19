@@ -11,6 +11,7 @@ import (
 
 func main() {
 	err := os.Setenv("web", "true")
+	port := os.Getenv("PORT")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -24,5 +25,5 @@ func main() {
 		AllowHeaders: []string{"origin"},
 	}))
 
-	router.Run(":3000")
+	router.Run(":" + port)
 }
