@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/TaKeO90/exceldumper/server/handler"
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,12 +17,9 @@ func main() {
 	router := gin.Default()
 
 	router.POST("/file/upload", handler.HandleRequest)
+	router.OPTIONS("/file/upload", handler.HandleRequest)
 	router.POST("/file/download", handler.HandleRequest)
-	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"*"},
-		AllowMethods: []string{"POST"},
-		AllowHeaders: []string{"origin"},
-	}))
+	router.OPTIONS("/file/download", handler.HandleRequest)
 
 	router.Run(":" + port)
 }
