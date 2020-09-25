@@ -1,6 +1,7 @@
 package dialer
 
 import (
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -28,7 +29,7 @@ type BadRequest struct {
 
 func handleOption(c *gin.Context) {
 	c.Header("Allow", "POST, OPTIONS")
-	c.Header("Access-Control-Allow-Origin", "http://localhost:5000")
+	c.Header("Access-Control-Allow-Origin", "*")
 	c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Content-Length")
 	c.Header("Content-Type", "application/json")
 	if c.Request.Method == "OPTIONS" {
